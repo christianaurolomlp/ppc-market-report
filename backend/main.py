@@ -16,7 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db, init_db, async_session
-from models import Lead, ReportJob, Report, ReportKeyword, ReportCompetitor, ReportInsight
+from models import Lead, ReportJob, Report, ReportKeyword, ReportCompetitor, ReportInsight, AppConfig
 from processor import process_job
 
 logging.basicConfig(level=logging.INFO)
@@ -288,6 +288,50 @@ async def trigger_process(
     background_tasks.add_task(run_job_in_background, str(job.id))
 
     return {"message": "Processing started", "job_id": str(job.id)}
+
+
+# ── Config endpoints ──────────────────────────────────────────────────
+
+class ConfigUpdate(BaseModel):
+    anthropic_api_key: str
+
+
+@app.get("/api/config/status")
+async def config_status(db: AsyncSession = Depends(get_db)):
+    """Check if API key is configured (without revealing it)."""
+    import os
+    # Check env first
+    if os.getenv("ANTHROPIC_API_KEY"):
+        return {"configured": True, "source": "environment"}
+    # Check DB
+    result = await db.execute(
+        select(AppConfig).where(AppConfig.key == "anthropic_api_key")
+    )
+    row = result.scalar_one_or_none()
+    if row and row.value:
+        return {"configured": True, "source": "database"}
+    return {"configured": False, "source": None}
+
+
+@app.post("/api/config")
+async def update_config(data: ConfigUpdate, db: AsyncSession = Depends(get_db)):
+    """Save Anthropic API key to database."""
+    key_val = data.anthropic_api_key.strip()
+    if not key_val:
+        raise HTTPException(status_code=400, detail="API key cannot be empty")
+
+    result = await db.execute(
+        select(AppConfig).where(AppConfig.key == "anthropic_api_key")
+    )
+    existing = result.scalar_one_or_none()
+
+    if existing:
+        existing.value = key_val
+    else:
+        db.add(AppConfig(key="anthropic_api_key", value=key_val))
+
+    await db.commit()
+    return {"ok": True}
 
 
 if __name__ == "__main__":

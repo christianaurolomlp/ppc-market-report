@@ -9,11 +9,24 @@ import anthropic
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from models import Report, ReportJob, ReportKeyword, ReportCompetitor, ReportInsight
+from models import Report, ReportJob, ReportKeyword, ReportCompetitor, ReportInsight, AppConfig
 
 logger = logging.getLogger(__name__)
 
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+ANTHROPIC_API_KEY_ENV = os.getenv("ANTHROPIC_API_KEY", "")
+
+
+async def get_anthropic_api_key(db: AsyncSession) -> str:
+    """Get API key: env first, then DB, then error."""
+    if ANTHROPIC_API_KEY_ENV:
+        return ANTHROPIC_API_KEY_ENV
+    result = await db.execute(
+        select(AppConfig).where(AppConfig.key == "anthropic_api_key")
+    )
+    row = result.scalar_one_or_none()
+    if row and row.value:
+        return row.value
+    raise ValueError("API key no configurada. Ve a /configuracion para añadirla.")
 
 ANALYSIS_PROMPT = """Eres un analista experto en PPC y marketing digital. Se te proporciona el contenido extraído de una página web. Tu tarea es analizar el negocio y generar un informe completo de mercado PPC.
 
@@ -153,9 +166,9 @@ async def scrape_website(url: str) -> str:
         return f"Error al acceder a la web: {str(e)}"
 
 
-async def analyze_with_claude(url: str, web_content: str) -> dict:
+async def analyze_with_claude(url: str, web_content: str, api_key: str) -> dict:
     """Send scraped content to Claude for analysis."""
-    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    client = anthropic.Anthropic(api_key=api_key)
 
     prompt = ANALYSIS_PROMPT.format(url=url, web_content=web_content)
 
@@ -209,9 +222,12 @@ async def process_job(job_id: str, db: AsyncSession):
         logger.info(f"Scraping {job.website_url}")
         web_content = await scrape_website(job.website_url)
 
+        # Step 1.5: Get API key
+        api_key = await get_anthropic_api_key(db)
+
         # Step 2: Analyze with Claude
         logger.info(f"Analyzing with Claude for job {job_id}")
-        analysis = await analyze_with_claude(job.website_url, web_content)
+        analysis = await analyze_with_claude(job.website_url, web_content, api_key)
 
         # Step 3: Save report
         business = analysis.get("business", {})

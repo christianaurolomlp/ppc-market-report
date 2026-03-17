@@ -93,6 +93,15 @@ class ReportCompetitor(Base):
     notes = Column(Text, nullable=True)
 
 
+class AppConfig(Base):
+    __tablename__ = "app_config"
+
+    id = Column(Integer, primary_key=True)
+    key = Column(String, unique=True, nullable=False)
+    value = Column(Text, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
 class ReportInsight(Base):
     __tablename__ = "report_insights"
 
