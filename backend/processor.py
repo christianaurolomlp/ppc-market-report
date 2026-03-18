@@ -173,7 +173,7 @@ async def analyze_with_claude(url: str, web_content: str, api_key: str) -> dict:
     prompt = ANALYSIS_PROMPT.format(url=url, web_content=web_content)
 
     message = client.messages.create(
-        model="claude-sonnet-4-6-20250514",
+        model="claude-sonnet-4-5",
         max_tokens=4096,
         messages=[{"role": "user", "content": prompt}],
     )
