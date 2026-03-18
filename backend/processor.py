@@ -17,15 +17,15 @@ ANTHROPIC_API_KEY_ENV = os.getenv("ANTHROPIC_API_KEY", "")
 
 
 async def get_anthropic_api_key(db: AsyncSession) -> str:
-    """Get API key: env first, then DB, then error."""
-    if ANTHROPIC_API_KEY_ENV:
-        return ANTHROPIC_API_KEY_ENV
+    """Get API key: DB first (user-configured), then env var fallback."""
     result = await db.execute(
         select(AppConfig).where(AppConfig.key == "anthropic_api_key")
     )
     row = result.scalar_one_or_none()
     if row and row.value:
         return row.value
+    if ANTHROPIC_API_KEY_ENV:
+        return ANTHROPIC_API_KEY_ENV
     raise ValueError("API key no configurada. Ve a /configuracion para añadirla.")
 
 ANALYSIS_PROMPT = """Eres un analista experto en PPC y marketing digital. Se te proporciona el contenido extraído de una página web. Tu tarea es analizar el negocio y generar un informe completo de mercado PPC.
